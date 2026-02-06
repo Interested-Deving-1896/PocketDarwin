@@ -14,5 +14,5 @@ FOUNDATION_EXPORT double Mobile_ControllerVersionNumber;
 FOUNDATION_EXPORT const unsigned char Mobile_ControllerVersionString[];
 
 // In this header, you should import all the public headers of your framework using statements like #import <Mobile_Controller/PublicHeader.h>
-
-
+#import <Mobile_Controller/CoreMobile.h>
+#import <Mobile_Controller/MobileEnvironmentInfo.h>

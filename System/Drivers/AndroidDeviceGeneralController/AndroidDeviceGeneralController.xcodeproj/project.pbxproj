@@ -8,11 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		2A7747122F366B8A009EDFB3 /* DriverKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A7747112F366B8A009EDFB3 /* DriverKit.framework */; };
+		2A7747202F366BE6009EDFB3 /* Documentation.docc in Sources */ = {isa = PBXBuildFile; fileRef = 2A77471F2F366BE6009EDFB3 /* Documentation.docc */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		2A77470E2F366B8A009EDFB3 /* org.pockerdarwin.AndroidDeviceGeneralController.dext */ = {isa = PBXFileReference; explicitFileType = "wrapper.driver-extension"; includeInIndex = 0; path = org.pockerdarwin.AndroidDeviceGeneralController.dext; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A7747112F366B8A009EDFB3 /* DriverKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DriverKit.framework; path = Library/Frameworks/DriverKit.framework; sourceTree = DEVELOPER_DIR; };
+		2A77471F2F366BE6009EDFB3 /* Documentation.docc */ = {isa = PBXFileReference; lastKnownFileType = folder.documentationcatalog; path = Documentation.docc; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -51,6 +53,7 @@
 		2A7747042F366B89009EDFB3 = {
 			isa = PBXGroup;
 			children = (
+				2A77471F2F366BE6009EDFB3 /* Documentation.docc */,
 				2A7747132F366B8A009EDFB3 /* AndroidDeviceGeneralController */,
 				2A7747102F366B8A009EDFB3 /* Frameworks */,
 				2A77470F2F366B8A009EDFB3 /* Products */,
@@ -157,6 +160,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2A7747202F366BE6009EDFB3 /* Documentation.docc in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,22 +1,22 @@
-#include "UARTDriver.hpp"
+#include "FramebufferDriver.hpp"
 #include <IOKit/IOLib.h>
 #include <IOKit/IORegistryEntry.h>
 
 #define super IOService
-OSDefineMetaClassAndStructors(UARTDriver, IOService)
+OSDefineMetaClassAndStructors(FramebufferDriver, IOService)
 
 static void log_boot_args(void)
 {
     IORegistryEntry *chosen = IORegistryEntry::fromPath("IODeviceTree:/chosen", gIODTPlane);
     if (!chosen) {
-        IOLog("PocketDarwin: UARTDriver no /chosen node\\n");
+        IOLog("PocketDarwin: FramebufferDriver no /chosen node\n");
         return;
     }
 
     OSObject *bootArgs = chosen->getProperty("boot-args");
     if (bootArgs) {
         if (OSString *str = OSDynamicCast(OSString, bootArgs)) {
-            IOLog("PocketDarwin: boot-args=%s\\n", str->getCStringNoCopy());
+            IOLog("PocketDarwin: boot-args=%s\n", str->getCStringNoCopy());
         } else if (OSData *data = OSDynamicCast(OSData, bootArgs)) {
             const char *bytes = (const char *)data->getBytesNoCopy();
             size_t len = data->getLength();
@@ -24,8 +24,8 @@ static void log_boot_args(void)
                 char *tmp = (char *)IOMalloc(len + 1);
                 if (tmp) {
                     memcpy(tmp, bytes, len);
-                    tmp[len] = '\\0';
-                    IOLog("PocketDarwin: boot-args=%s\\n", tmp);
+                    tmp[len] = '\0';
+                    IOLog("PocketDarwin: boot-args=%s\n", tmp);
                     IOFree(tmp, len + 1);
                 }
             }
@@ -34,20 +34,19 @@ static void log_boot_args(void)
     chosen->release();
 }
 
-bool UARTDriver::start(IOService *provider)
+bool FramebufferDriver::start(IOService *provider)
 {
     if (!super::start(provider))
         return false;
 
-    IOLog("PocketDarwin: UARTDriver start (IOKit stub)\\n");
+    IOLog("PocketDarwin: FramebufferDriver start (IOKit stub)\n");
     log_boot_args();
-
     registerService();
     return true;
 }
 
-void UARTDriver::stop(IOService *provider)
+void FramebufferDriver::stop(IOService *provider)
 {
-    IOLog("PocketDarwin: UARTDriver stop\\n");
+    IOLog("PocketDarwin: FramebufferDriver stop\n");
     super::stop(provider);
 }

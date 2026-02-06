@@ -9,11 +9,16 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "InterludeIO.h"
+#include "Linux2DarwinBridge.h"
+#include "JSONParser.h"
+
 static const char *default_config_path = "/sdcard/OCMobileConfig.json";
+static const char *default_usb_serial = "/dev/ttyACM0";
 
 static void usage(const char *prog) {
     fprintf(stderr,
-        "Usage: %s [--kernel <path>] [--config <path>] [--initrd <path>] [--cmdline <string>] [--exec] [--dry-run]\n"
+        "Usage: %s [--kernel <path>] [--config <path>] [--initrd <path>] [--cmdline <string>] [--dtb <path>] [--exec] [--dry-run]\n"
         "\n"
         "Prepares a Linux system and loads a Darwin kernel via kexec.\n"
         "\n"
@@ -22,6 +27,7 @@ static void usage(const char *prog) {
         "  --config <path>   Path to OCMobileConfig.json (default: /sdcard/OCMobileConfig.json)\n"
         "  --initrd <path>   Optional initrd/ramdisk image\n"
         "  --cmdline <str>   Kernel command line string\n"
+        "  --dtb <path>      Optional Linux DTB for UART/FB handoff\n"
         "  --exec            Execute kexec immediately after loading\n"
         "  --dry-run         Print actions without executing kexec\n"
         "  -h, --help        Show this help\n",
@@ -46,7 +52,17 @@ static int write_sysctl(const char *path, const char *value) {
     return 0;
 }
 
-static char *read_file(const char *path, size_t *out_len) {
+static char *load_kernel_path_from_config(const char *config_path, char **error) {
+    JSONValue *root = json_parse_file(config_path, error);
+    if (!root) {
+        return NULL;
+    }
+    char *path = oc_mobile_get_kernel_path(root);
+    json_free(root);
+    return path;
+}
+
+static void *read_file_blob(const char *path, size_t *out_size) {
     FILE *f = fopen(path, "rb");
     if (!f) {
         return NULL;
@@ -56,7 +72,7 @@ static char *read_file(const char *path, size_t *out_len) {
         return NULL;
     }
     long len = ftell(f);
-    if (len < 0) {
+    if (len <= 0) {
         fclose(f);
         return NULL;
     }
@@ -64,81 +80,92 @@ static char *read_file(const char *path, size_t *out_len) {
         fclose(f);
         return NULL;
     }
-    char *buf = (char *)malloc((size_t)len + 1);
+    void *buf = malloc((size_t)len);
     if (!buf) {
         fclose(f);
         return NULL;
     }
     size_t read_len = fread(buf, 1, (size_t)len, f);
     fclose(f);
-    buf[read_len] = '\0';
-    if (out_len) {
-        *out_len = read_len;
+    if (read_len != (size_t)len) {
+        free(buf);
+        return NULL;
+    }
+    if (out_size) {
+        *out_size = (size_t)len;
     }
     return buf;
 }
 
-static char *extract_json_string_value(const char *json, const char *key) {
-    if (!json || !key) {
+static char *append_bootargs(const char *base, const char *extra) {
+    if (!extra || extra[0] == '\0') {
+        return base ? strdup(base) : NULL;
+    }
+    if (!base || base[0] == '\0') {
+        return strdup(extra);
+    }
+    size_t base_len = strlen(base);
+    size_t extra_len = strlen(extra);
+    char *out = (char *)malloc(base_len + 1 + extra_len + 1);
+    if (!out) {
         return NULL;
     }
-    size_t key_len = strlen(key);
-    const char *p = json;
-    while ((p = strstr(p, key)) != NULL) {
-        // ensure we're at a quoted key: "key"
-        if (p > json && p[-1] == '"' && p[key_len] == '"') {
-            const char *colon = strchr(p + key_len + 1, ':');
-            if (!colon) {
-                return NULL;
-            }
-            const char *val = colon + 1;
-            while (*val == ' ' || *val == '\t' || *val == '\n' || *val == '\r') {
-                val++;
-            }
-            if (*val != '"') {
-                return NULL;
-            }
-            val++;
-            const char *end = strchr(val, '"');
-            if (!end) {
-                return NULL;
-            }
-            size_t len = (size_t)(end - val);
-            char *out = (char *)malloc(len + 1);
-            if (!out) {
-                return NULL;
-            }
-            memcpy(out, val, len);
-            out[len] = '\0';
-            return out;
-        }
-        p += key_len;
-    }
-    return NULL;
+    memcpy(out, base, base_len);
+    out[base_len] = ' ';
+    memcpy(out + base_len + 1, extra, extra_len);
+    out[base_len + 1 + extra_len] = '\0';
+    return out;
 }
 
-static char *load_kernel_path_from_config(const char *config_path) {
-    size_t len = 0;
-    char *json = read_file(config_path, &len);
-    if (!json) {
+static char *build_pd_bootargs(const L2D_BridgeResult *res) {
+    char buf[512];
+    int offset = 0;
+    offset += snprintf(buf + offset, sizeof(buf) - offset,
+                       "pd.uart.base=0x%llx pd.uart.size=0x%llx pd.uart.irq=%d",
+                       (unsigned long long)res->uart.reg.base,
+                       (unsigned long long)res->uart.reg.size,
+                       res->uart.irq);
+    if (offset < 0 || (size_t)offset >= sizeof(buf)) {
         return NULL;
     }
-    const char *keys[] = {
-        "darwinKernelPath",
-        "darwin_kernel_path",
-        "darwinKernel",
-        "darwin_kernel",
-        NULL
-    };
-    char *value = NULL;
-    for (int i = 0; keys[i]; ++i) {
-        value = extract_json_string_value(json, keys[i]);
-        if (value) {
-            break;
-        }
+    offset += snprintf(buf + offset, sizeof(buf) - offset,
+                       " pd.fb.base=0x%llx pd.fb.size=0x%llx pd.fb.w=%d pd.fb.h=%d pd.fb.stride=%d",
+                       (unsigned long long)res->framebuffer.reg.base,
+                       (unsigned long long)res->framebuffer.reg.size,
+                       res->framebuffer.width,
+                       res->framebuffer.height,
+                       res->framebuffer.stride);
+    if (offset < 0 || (size_t)offset >= sizeof(buf)) {
+        return NULL;
     }
-    free(json);
-    return value;
+    return strdup(buf);
+}
+
+static char *build_pd_storage_bootargs(const char *sd_root, const char *mobile_root, int allow_internal) {
+    char buf[512];
+    int offset = 0;
+    if (sd_root && sd_root[0] != '\0') {
+        offset += snprintf(buf + offset, sizeof(buf) - offset, " pd.sdroot=%s", sd_root);
+    }
+    if (offset < 0 || (size_t)offset >= sizeof(buf)) {
+        return NULL;
+    }
+    if (mobile_root && mobile_root[0] != '\0') {
+        offset += snprintf(buf + offset, sizeof(buf) - offset, " pd.mobileenv=%s", mobile_root);
+    }
+    if (offset < 0 || (size_t)offset >= sizeof(buf)) {
+        return NULL;
+    }
+    if (allow_internal >= 0) {
+        offset += snprintf(buf + offset, sizeof(buf) - offset, " pd.allow_internal=%d", allow_internal ? 1 : 0);
+    }
+    if (offset < 0 || (size_t)offset >= sizeof(buf)) {
+        return NULL;
+    }
+    if (offset == 0) {
+        return NULL;
+    }
+    return strdup(buf);
 }
 
 static bool is_linux(void) {
@@ -173,6 +200,13 @@ int main(int argc, char **argv) {
     bool do_exec = false;
     bool dry_run = false;
     char *kernel_from_config = NULL;
+    char *json_error = NULL;
+    char *sd_root = NULL;
+    char *mobile_root = NULL;
+    int allow_internal = -1;
+    bool usb_serial_ok = false;
+    bool fb_ok = false;
+    const char *dtb_path = NULL;
 
     if (argc == 1) {
         usage(argv[0]);
@@ -188,6 +222,8 @@ int main(int argc, char **argv) {
             initrd = argv[++i];
         } else if (strcmp(argv[i], "--cmdline") == 0 && i + 1 < argc) {
             cmdline = argv[++i];
+        } else if (strcmp(argv[i], "--dtb") == 0 && i + 1 < argc) {
+            dtb_path = argv[++i];
         } else if (strcmp(argv[i], "--exec") == 0) {
             do_exec = true;
         } else if (strcmp(argv[i], "--dry-run") == 0) {
@@ -203,12 +239,26 @@ int main(int argc, char **argv) {
     }
 
     if (!kernel) {
-        kernel_from_config = load_kernel_path_from_config(config_path);
+        kernel_from_config = load_kernel_path_from_config(config_path, &json_error);
         if (!kernel_from_config) {
-            fprintf(stderr, "No --kernel provided and failed to read %s.\n", config_path);
+            fprintf(stderr, "No --kernel provided and failed to read %s", config_path);
+            if (json_error) {
+                fprintf(stderr, ": %s", json_error);
+            }
+            fprintf(stderr, ".\n");
+            free(json_error);
             return 1;
         }
         kernel = kernel_from_config;
+    }
+
+    // Optional storage overrides from OCMobileConfig.json
+    JSONValue *config_root = json_parse_file(config_path, NULL);
+    if (config_root) {
+        sd_root = oc_mobile_get_external_storage_root(config_root);
+        mobile_root = oc_mobile_get_mobile_environment_root(config_root);
+        allow_internal = oc_mobile_get_internal_storage_allowed(config_root, -1);
+        json_free(config_root);
     }
 
     if (!is_linux()) {
@@ -221,15 +271,27 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    usb_serial_ok = interlude_attach_usb_serial(default_usb_serial);
+    if (!usb_serial_ok) {
+        fprintf(stderr, "[interlude] USB serial not available, continuing without it.\n");
+    }
+
+    fb_ok = interlude_init_framebuffer();
+    if (!fb_ok) {
+        fprintf(stderr, "[interlude] Framebuffer not available, continuing without it.\n");
+    }
+
     if (!file_exists(kernel)) {
         fprintf(stderr, "Kernel image not found: %s\n", kernel);
         free(kernel_from_config);
+        free(json_error);
         return 1;
     }
 
     if (initrd && !file_exists(initrd)) {
         fprintf(stderr, "Initrd image not found: %s\n", initrd);
         free(kernel_from_config);
+        free(json_error);
         return 1;
     }
 
@@ -238,6 +300,7 @@ int main(int argc, char **argv) {
         if (!dry_run && write_sysctl(kexec_disable, "0") != 0) {
             fprintf(stderr, "Failed to enable kexec load (%s): %s\n", kexec_disable, strerror(errno));
             free(kernel_from_config);
+            free(json_error);
             return 1;
         }
     }
@@ -255,12 +318,57 @@ int main(int argc, char **argv) {
     if (cmdline) {
         printf("  cmdline: %s\n", cmdline);
     }
+    if (dtb_path) {
+        printf("  dtb: %s\n", dtb_path);
+    }
     printf("  exec after load: %s\n", do_exec ? "yes" : "no");
 
     if (dry_run) {
         printf("Dry run: not invoking kexec.\n");
         free(kernel_from_config);
+        free(json_error);
         return 0;
+    }
+
+    char *bootargs = cmdline ? strdup(cmdline) : NULL;
+    if (dtb_path) {
+#if defined(L2D_USE_LIBFDT)
+        size_t dtb_size = 0;
+        void *dtb = read_file_blob(dtb_path, &dtb_size);
+        if (!dtb) {
+            fprintf(stderr, "Failed to read DTB: %s\n", dtb_path);
+        } else {
+            L2D_BridgeResult bridge;
+            char *dtb_error = NULL;
+            if (l2d_parse_dtb(dtb, dtb_size, &bridge, &dtb_error) == 0) {
+                char *extra = build_pd_bootargs(&bridge);
+                char *tmp = append_bootargs(bootargs, extra);
+                free(bootargs);
+                bootargs = tmp;
+                free(extra);
+                l2d_free_result(&bridge);
+            } else {
+                fprintf(stderr, "DTB parse failed: %s\n", dtb_error ? dtb_error : "unknown error");
+                free(dtb_error);
+            }
+            free(dtb);
+        }
+#else
+        fprintf(stderr, "DTB support not enabled. Rebuild with L2D_WITH_LIBFDT=1.\n");
+#endif
+    }
+
+    char *storage_args = build_pd_storage_bootargs(sd_root, mobile_root, allow_internal);
+    if (storage_args) {
+        char *tmp = append_bootargs(bootargs, storage_args);
+        free(bootargs);
+        bootargs = tmp;
+        free(storage_args);
+    }
+
+    const char *effective_cmdline = cmdline;
+    if (bootargs) {
+        effective_cmdline = bootargs;
     }
 
     // Build kexec arguments
@@ -273,9 +381,9 @@ int main(int argc, char **argv) {
         args[idx++] = (char *)"--initrd";
         args[idx++] = (char *)initrd;
     }
-    if (cmdline) {
+    if (effective_cmdline) {
         args[idx++] = (char *)"--command-line";
-        args[idx++] = (char *)cmdline;
+        args[idx++] = (char *)effective_cmdline;
     }
     args[idx] = NULL;
 
@@ -283,6 +391,10 @@ int main(int argc, char **argv) {
     if (pid < 0) {
         fprintf(stderr, "fork failed: %s\n", strerror(errno));
         free(kernel_from_config);
+        free(json_error);
+        free(bootargs);
+        free(sd_root);
+        free(mobile_root);
         return 1;
     }
     if (pid == 0) {
@@ -295,11 +407,19 @@ int main(int argc, char **argv) {
     if (waitpid(pid, &status, 0) < 0) {
         fprintf(stderr, "waitpid failed: %s\n", strerror(errno));
         free(kernel_from_config);
+        free(json_error);
+        free(bootargs);
+        free(sd_root);
+        free(mobile_root);
         return 1;
     }
     if (status != 0) {
         fprintf(stderr, "kexec load failed (status %d).\n", status);
         free(kernel_from_config);
+        free(json_error);
+        free(bootargs);
+        free(sd_root);
+        free(mobile_root);
         return 1;
     }
 
@@ -309,10 +429,18 @@ int main(int argc, char **argv) {
         execvp(kexec_path, exec_args);
         fprintf(stderr, "Failed to exec kexec -e: %s\n", strerror(errno));
         free(kernel_from_config);
+        free(json_error);
+        free(bootargs);
+        free(sd_root);
+        free(mobile_root);
         return 1;
     }
 
     free(kernel_from_config);
+    free(json_error);
+    free(bootargs);
+    free(sd_root);
+    free(mobile_root);
     printf("kexec load complete.\n");
     return 0;
 }
