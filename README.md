@@ -75,6 +75,16 @@ Toolchain smoke test:
 Developer/SDKs/scripts/toolchain_smoke_test.sh /tmp/pd-smoke
 ```
 
+## macOS installer DMG
+```sh
+scripts/make_dmg.sh
+```
+
+## Build system (Swift)
+```sh
+./BuildSystem/pdbuild.swift help
+```
+
 ## Interlude (Linux Boot Loader)
 Interlude runs on the device to boot the Darwin kernel. It is a minimal Android Linux kernel build, just enough to bring up Darwin, and it is started automatically by `init`.
 
