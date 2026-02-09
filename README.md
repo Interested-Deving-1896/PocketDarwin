@@ -191,3 +191,7 @@ Objective-C helper:
 ```objc
 MCMobileEnvironmentInfo *info = [MCMobileEnvironmentInfo currentInfo];
 ```
+
+## Supported devices
+- harpia (Moto G4 Play, 2016, Linux kernel 3.10) **official development device**
+- Any android device thats aarch64 and has the linux kernel source tree publicaly available
