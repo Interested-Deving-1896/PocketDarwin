@@ -1,0 +1,12 @@
+[Unit]
+Description=L2DKit Host Daemon
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/l2dkit-hostd
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
+
