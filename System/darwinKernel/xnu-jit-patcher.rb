@@ -5,7 +5,7 @@ require "optparse"
 require "pathname"
 
 options = {
-  xnu_dir: Pathname.new(__dir__).join("xnu-arm"),
+  xnu_dir: Pathname.new(__dir__).join("xnu"),
   patch_dir: Pathname.new(__dir__).join("patches", "xnu-arm-armpba8"),
   series: "series",
   strip: "1"

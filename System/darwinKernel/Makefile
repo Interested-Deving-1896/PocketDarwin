@@ -23,6 +23,9 @@ KERNELVERSION  ?= 0.0.0
 ARCH_CONFIGS := ARM64
 # ARCH := ARM64
 
+SHELL=/bin/bash
+CONFIG_SHELL=/bin/bash -e
+
 export SRCROOT := $(XNU_SRC)
 export OBJROOT
 export SYMROOT
@@ -34,6 +37,8 @@ export ARM_CPU
 #export CURRENT_ARCH_CONFIGS
 export ARCH_CONFIGS
 #export ARCH
+export SHELL
+export CONFIG_SHELL
 
 .PHONY: all xnu dirs clean
 
@@ -61,3 +66,14 @@ xnu:
 clean:
 	rm -rf $(BUILD)
 
+kext_tools:
+	cd $(ROOT)/kext_tools && \
+	xcodebuild -project kext_tools.xcodeproj \
+	  -configuration $(BUILDTYPE) \
+	  ARCHS=$(ARCH) \
+	  ONLY_ACTIVE_ARCH=NO \
+	  SDKROOT=$(SDKROOT) \
+	  SYMROOT=$(SYMROOT) \
+	  OBJROOT=$(OBJROOT) \
+	  DSTROOT=$(DSTROOT)
+	
