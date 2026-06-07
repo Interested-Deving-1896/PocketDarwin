@@ -1,37 +1,75 @@
-<div align="center">
-  <img src="logo.png" alt="PocketDarwin Logo" width="240" />
-  <h1>PocketDarwin</h1>
-  <p>I'm the crazy guy who's gonna clone iOS! — OakyMacintosh</p>
-</div>
+[update-readmes]   Mode: rewrite — migrating to template structure...
+# PocketDarwin
 
-## What This Repo Is
-PocketDarwin is an Darwin port for Android hardware.
+[![Built with Ona](https://ona.com/build-with-ona.svg)](https://app.ona.com/#https://github.com/Interested-Deving-1896/PocketDarwin)
 
->[!NEW] Discord server now available on https://discord.gg/bthwXwh8vP
+<!-- AI:start:what-it-does -->
+_Description pending._
+<!-- AI:end:what-it-does -->
 
-## Installation instructions
+## Architecture
 
->[!NOTE] PocketDarwin will never ships pre-built linux interludes!! Only system bundles are released.
+<!-- AI:start:architecture -->
+_Architecture documentation pending._
+<!-- AI:end:architecture -->
 
-```sh
-# build the xnu kernel
-$ cd System/darwinKernel/xnu-arm
-$ make TARGET_CONFIGS="debug arm ARMPBA8"
-# build the interlude linux kernel
-# you will need to get your device's android linux kernel.
-# for example: android_kernel_moto_msm9816
-$ cd System/Boot/linuxTemp/<the device kernel dir>
-$ cp ../configs/<device codename>/.config .config
-$ ARCH="arm" make
-# create the System bundle
-$ cd System/SystemBundle
-# for macOS
-$ make darwinApp
-# for linux
-$ make linuxapp
-$ ./dist/pdbundle -kernel ../darwinKernel/xnu-arm/BUILD/DEBUG_ARM/kernel -sysroot $(./pdbundle -makesysroot -s 30G) -relname PocketDarwin.System -buildsys -buildframeworks="../../Frameworks"
+## Install
+
+<!-- Add installation instructions here. This section is yours — the AI will not modify it. -->
+
+```bash
+git clone https://github.com/Interested-Deving-1896/PocketDarwin.git
+cd PocketDarwin
 ```
 
-## Supported devices
-- harpia (Moto G4 Play, 2016, Linux kernel 3.10) **official development device**
-- Any android device thats aarch64 and has the linux kernel source tree publicaly available
+## Usage
+
+<!-- Add usage examples here. This section is yours — the AI will not modify it. -->
+
+## Configuration
+
+<!-- Document configuration options here. This section is yours — the AI will not modify it. -->
+
+## CI
+
+<!-- AI:start:ci -->
+_CI documentation pending._
+<!-- AI:end:ci -->
+
+## Mirror chain
+
+<!-- AI:start:mirror-chain -->
+This repo is maintained in [`Interested-Deving-1896/PocketDarwin`](https://github.com/Interested-Deving-1896/PocketDarwin) and mirrored through:
+
+```
+Interested-Deving-1896/PocketDarwin  ──►  OpenOS-Project-OSP/PocketDarwin  ──►  OpenOS-Project-Ecosystem-OOC/PocketDarwin
+```
+
+Changes flow downstream automatically via the hourly mirror chain in
+[`fork-sync-all`](https://github.com/Interested-Deving-1896/fork-sync-all).
+Direct commits to OSP or OOC are detected and opened as PRs back to `Interested-Deving-1896`.
+<!-- AI:end:mirror-chain -->
+
+## Contributors
+
+<!-- AI:start:contributors -->
+_Contributors pending._
+<!-- AI:end:contributors -->
+
+## Origins
+
+<!-- AI:start:origins -->
+_Original project — no upstream fork._
+<!-- AI:end:origins -->
+
+## Resources
+
+<!-- AI:start:resources -->
+_No additional resource files found._
+<!-- AI:end:resources -->
+
+## License
+
+<!-- AI:start:license -->
+[MIT](https://github.com/Interested-Deving-1896/PocketDarwin/blob/master/LICENSE) © 2026 [Interested-Deving-1896](https://github.com/Interested-Deving-1896)
+<!-- AI:end:license -->
